@@ -1,0 +1,124 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    
+    # 1. pyeong: 전용면적 / 3.30578
+    df['pyeong'] = df['exclu_use_ar'] / 3.30578
+    
+    # 2. price calculations
+    df['pyeong_price_won'] = (df['deal_amount'] * 10000) / df['pyeong']
+    df['pyeong_price_man'] = df['deal_amount'] / df['pyeong']
+    
+    # 3. age: current_year - build_year
+    current_year = datetime.now().year
+    df['age'] = current_year - df['build_year']
+    df['age_is_estimated'] = True # As per requirement "추측입니다"
+    
+    return df
+
+def filter_size_band(df: pd.DataFrame, min_m2: float, max_m2: float) -> pd.DataFrame:
+    return df[(df['exclu_use_ar'] >= min_m2) & (df['exclu_use_ar'] <= max_m2)]
+
+def compute_leading_complex(df: pd.DataFrame, lookback_years: int, n_total: int, n_85: int, min_m2: float, max_m2: float) -> dict:
+    if df.empty:
+        return {"top1": None, "top5": None, "params": locals(), "notes": "데이터가 없습니다."}
+    
+    # Filter by lookback
+    current_year = datetime.now().year
+    df_recent = df[df['deal_year'] >= (current_year - lookback_years)]
+    
+    # Group by apt_seq
+    grouped = df_recent.groupby(['apt_seq', 'apt_nm', 'build_year']).agg(
+        cnt_total=('deal_amount', 'count'),
+        median_pyeong_price_man=('pyeong_price_man', 'median')
+    ).reset_index()
+    
+    # Count in specific band (84-86 as default, passed via params)
+    df_band = filter_size_band(df_recent, min_m2, max_m2)
+    band_counts = df_band.groupby('apt_seq').size().reset_index(name='cnt_band')
+    
+    grouped = pd.merge(grouped, band_counts, on='apt_seq', how='left').fillna(0)
+    
+    # Filtering criteria: cnt_total >= n_total AND cnt_band >= n_85
+    filtered = grouped[(grouped['cnt_total'] >= n_total) & (grouped['cnt_band'] >= n_85)]
+    
+    if filtered.empty:
+        return {"top1": None, "top5": None, "params": locals(), "notes": "조건을 만족하는 단지가 없습니다."}
+    
+    # Sort by median price
+    sorted_df = filtered.sort_values(by='median_pyeong_price_man', ascending=False)
+    
+    top1 = sorted_df.iloc[0].to_dict()
+    top5 = sorted_df.head(5)
+    
+    return {
+        "top1": top1,
+        "top5": top5,
+        "params": {"lookback_years": lookback_years, "n_total": n_total, "n_85": n_85, "min_m2": min_m2, "max_m2": max_m2},
+        "notes": "거래빈도는 단지 규모 대리변수이므로 결과에 확실하지 않음 문구 포함"
+    }
+
+def compute_age_group_levels(df_band: pd.DataFrame, min_samples: int = 10) -> pd.DataFrame:
+    if df_band.empty:
+        return pd.DataFrame()
+    
+    # Define age groups
+    def get_age_group(age):
+        if age <= 5: return "≤5 (신축)"
+        elif age <= 10: return "5~10 (준신축)"
+        else: return ">10 (구축)"
+    
+    df_band = df_band.copy()
+    df_band['age_group'] = df_band['age'].apply(get_age_group)
+    
+    summary = df_band.groupby('age_group').agg(
+        median_pyeong_price_man=('pyeong_price_man', 'median'),
+        mean_pyeong_price_man=('pyeong_price_man', 'mean'),
+        median_deal_amount=('deal_amount', 'median'),
+        cnt=('deal_amount', 'count')
+    ).reset_index()
+    
+    summary['is_uncertain'] = summary['cnt'] < min_samples
+    
+    return summary
+
+def compute_trend(df_band: pd.DataFrame) -> dict:
+    if df_band.empty:
+        return {"monthly": None, "short_momentum_pct": 0, "long_slope": 0, "long_trend_label": "데이터 부족", "notes": ""}
+    
+    # Monthly aggregation
+    monthly = df_band.groupby('deal_ymd').agg(
+        median_price=('pyeong_price_man', 'median'),
+        volume=('deal_amount', 'count')
+    ).reset_index().sort_values('deal_ymd')
+    
+    if len(monthly) < 2:
+        return {"monthly": monthly, "short_momentum_pct": 0, "long_slope": 0, "long_trend_label": "데이터 부족", "notes": "분석을 위한 데이터가 부족합니다."}
+    
+    # Short momentum: Last 2 available months
+    recent_2 = monthly.tail(2)
+    short_momentum_pct = ((recent_2.iloc[-1]['median_price'] / recent_2.iloc[0]['median_price']) - 1) * 100 if len(recent_2) == 2 else 0
+    
+    # Long trend: Last 36 months linear regression
+    last_36 = monthly.tail(36)
+    x = np.arange(len(last_36))
+    y = last_36['median_price'].values
+    
+    if len(last_36) >= 12: # Minimum 12 months for "long" trend
+        slope, _ = np.polyfit(x, y, 1)
+        long_trend_label = "상승" if slope > 0 else "하락"
+    else:
+        slope = 0
+        long_trend_label = "데이터 부족"
+        
+    return {
+        "monthly": monthly,
+        "short_momentum_pct": round(short_momentum_pct, 2),
+        "long_slope": round(float(slope), 2),
+        "long_trend_label": long_trend_label,
+        "notes": "장기 추세는 최근 36개월 선형회귀 slope 기반입니다."
+    }
