@@ -40,8 +40,12 @@ def compute_leading_complex(df: pd.DataFrame, lookback_years: int, n_total: int,
     df_band = filter_size_band(df_recent, min_m2, max_m2)
     band_stats = df_band.groupby('apt_seq').agg(
         cnt_band=('deal_amount', 'count'),
-        median_pyeong_price_man=('pyeong_price_man', 'median')
+        median_pyeong_price_man=('pyeong_price_man', 'median'),
+        median_pyeong=('pyeong', 'median')
     ).reset_index()
+    
+    # 밴드 내 중위 매매가 계산 (평형 * 중위평당가)
+    band_stats['median_deal_amount_band'] = band_stats['median_pyeong'] * band_stats['median_pyeong_price_man']
     
     # 4. 두 집합 결합 (밴드 내 거래가 있는 단지 기준)
     grouped = pd.merge(total_stats, band_stats, on='apt_seq', how='inner')

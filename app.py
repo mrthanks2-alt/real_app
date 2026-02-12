@@ -1,18 +1,33 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import os
 import time
+import platform
 
 from storage import init_db, save_trades, load_trades, get_last_deal_ymd
 from rtms_client import RTMSClient, RateLimitError, ApiError
 import analytics
 
-# Matplotlib 한글 폰트 설정 (Windows 기준 Malgun Gothic)
-plt.rcParams['font.family'] = 'Malgun Gothic'
-plt.rcParams['axes.unicode_minus'] = False
+# OS별 한글 폰트 설정
+def set_korean_font():
+    os_name = platform.system()
+    if os_name == "Windows":
+        font_name = "Malgun Gothic"
+    elif os_name == "Darwin":  # macOS
+        font_name = "AppleGothic"
+    else:  # Linux (Streamlit Cloud 등)
+        # 나눔고딕이 설치되어 있을 경우 사용, 아닐 경우 기본 폰트 사용
+        font_name = "NanumGothic"
+        # 폰트 파일이 있는지 확인하거나 폰트 리스트에서 검색하는 로직을 추가할 수 있음
+    
+    plt.rcParams['font.family'] = font_name
+    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
+
+set_korean_font()
 
 # [설정] 컬럼명 한글 매핑 및 단위 명시
 COLUMN_MAPPING = {
@@ -32,6 +47,8 @@ COLUMN_MAPPING = {
     'median_pyeong_price_man': '중위 평당가 (만원)',
     'mean_pyeong_price_man': '평균 평당가 (만원)',
     'median_deal_amount': '매매가의 중앙값 (만원)',
+    'median_deal_amount_band': '중위 매매가 (만원)',
+    'median_pyeong': '전용평형',
     'umd_nm': '법정동',
     'jibun': '지번',
     'cnt_total': '전체 거래수',
@@ -45,7 +62,7 @@ DROP_COLUMNS = ['lawd_cd', 'deal_ymd', 'apt_seq', 'created_at', 'age_is_estimate
 INT_COLUMNS = [
     'cnt', 'cnt_band', 'cnt_total', 
     'median_pyeong_price_man', 'mean_pyeong_price_man',
-    'median_deal_amount', 'pyeong_price_won'
+    'median_deal_amount', 'median_deal_amount_band', 'pyeong_price_won'
 ]
 
 def format_for_display(df: pd.DataFrame) -> pd.DataFrame:
@@ -209,8 +226,8 @@ if btn_analyze or 'df_trades' in st.session_state:
             
             st.session_state['df_trades'] = df_period # 세션에는 기간 필터 버전 저장
             
-            # Main UI
-            st.title(f"🏠 {selected_name if region_df is not None else selected_lawd_cd} 아파트 실거래 분석")
+            # Main UI - 타이틀 크기 조정 (h3)
+            st.markdown(f"<h3>🏠 {selected_name if region_df is not None else selected_lawd_cd} 아파트 실거래 분석</h3>", unsafe_allow_html=True)
             
             # 요약 지표 (KPIs) - 선택된 평형(밴드) 기준
             kpi1, kpi2, kpi3 = st.columns(3)
@@ -227,7 +244,8 @@ if btn_analyze or 'df_trades' in st.session_state:
             st.markdown("---")
             trend_data = analytics.compute_trend(df_band)
             if trend_data['monthly'] is not None:
-                st.subheader("📈 시세 및 거래량 추세 (선택 평형 대상)")
+                # 소제목 크기 조정 (h5)
+                st.markdown("<h5>📈 시세 및 거래량 추세 (선택 평형 대상)</h5>", unsafe_allow_html=True)
                 
                 fig, ax1 = plt.subplots(figsize=(12, 5))
                 ax2 = ax1.twinx()
@@ -257,7 +275,7 @@ if btn_analyze or 'df_trades' in st.session_state:
 
             # 2. 리딩 단지 분석
             st.markdown("---")
-            st.subheader("🏆 지역 리딩 단지 (대장주)")
+            st.markdown("<h5>🏆 지역 리딩 단지 (대장주)</h5>", unsafe_allow_html=True)
             leading = analytics.compute_leading_complex(df_period, period_years, n_total, n_85, size_range[0], size_range[1])
             
             if leading['top1']:
@@ -270,9 +288,12 @@ if btn_analyze or 'df_trades' in st.session_state:
                     - **{period_years}년간 전체 거래**: {int(leading['top1']['cnt_total'])}건
                     """)
                 with c2:
-                    st.write("**상위 5개 단지 상세**")
+                    st.markdown("<b>상위 5개 단지 상세</b>", unsafe_allow_html=True)
                     display_top5 = format_for_display(leading['top5'])
-                    cols_to_show = ['단지명', '건축년도', '중위 평당가 (만원)', '전체 거래수', '밴드 거래수']
+                    # 컬럼 순서 조정: ["아파트명", "전용평형", "중위 평당가 (만원)", "중위 매매가 (만원)", "전체 거래수"]
+                    # 단지명(apt_nm)을 아파트명으로 표시하기 위해 매핑 확인
+                    display_top5 = display_top5.rename(columns={'단지명': '아파트명'})
+                    cols_to_show = ['아파트명', '전용평형', '중위 평당가 (만원)', '중위 매매가 (만원)', '전체 거래수']
                     st.table(display_top5[[c for c in cols_to_show if c in display_top5.columns]])
                 st.caption(f"💡 {leading['notes']}")
             else:
@@ -280,7 +301,7 @@ if btn_analyze or 'df_trades' in st.session_state:
 
             # 3. 연식 구간별 분석
             st.markdown("---")
-            st.subheader("🏗️ 연식 구간별 시세 수준")
+            st.markdown("<h5>🏗️ 연식 구간별 시세 수준</h5>", unsafe_allow_html=True)
             age_summary = analytics.compute_age_group_levels(df_band)
             if not age_summary.empty:
                 display_age = format_for_display(age_summary)
@@ -290,7 +311,7 @@ if btn_analyze or 'df_trades' in st.session_state:
 
             # 4. 원본 거래 데이터 (선택 평형 기준)
             st.markdown("---")
-            st.subheader("📋 선택 평형 실거래 내역")
+            st.markdown("<h5>📋 선택 평형 실거래 내역</h5>", unsafe_allow_html=True)
             # 내림차순 정렬 후 표시 전처리 적용
             display_raw = format_for_display(df_band.sort_values(['deal_year', 'deal_month', 'deal_day'], ascending=False))
             st.dataframe(display_raw, use_container_width=True, hide_index=True)
