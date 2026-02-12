@@ -1,0 +1,27 @@
+# Streamlit Secrets (Crucial: Contains API Key)
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+
+# Database (Local storage only)
+*.sqlite
+
+# Debug/Temp Logs
+debug_api.xml
+debug_api_data.json
+debug_url.txt
+debug_error.log
+
+# Data (Optional but recommended for privacy)
+lawd_cd.csv
+
+# OS
+.DS_Store
+Thumbs.db

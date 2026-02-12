@@ -27,23 +27,26 @@ def compute_leading_complex(df: pd.DataFrame, lookback_years: int, n_total: int,
     if df.empty:
         return {"top1": None, "top5": None, "params": locals(), "notes": "데이터가 없습니다."}
     
-    # Filter by lookback
+    # 1. 선정 전용 데이터셋 (기간 필터)
     current_year = datetime.now().year
     df_recent = df[df['deal_year'] >= (current_year - lookback_years)]
     
-    # Group by apt_seq
-    grouped = df_recent.groupby(['apt_seq', 'apt_nm', 'build_year']).agg(
-        cnt_total=('deal_amount', 'count'),
+    # 2. 전체 거래수 집합 (모든 평형 합산)
+    total_stats = df_recent.groupby(['apt_seq', 'apt_nm', 'build_year']).agg(
+        cnt_total=('deal_amount', 'count')
+    ).reset_index()
+    
+    # 3. 밴드 내 통계 집합 (설정 평형 한정: 가격 및 건수)
+    df_band = filter_size_band(df_recent, min_m2, max_m2)
+    band_stats = df_band.groupby('apt_seq').agg(
+        cnt_band=('deal_amount', 'count'),
         median_pyeong_price_man=('pyeong_price_man', 'median')
     ).reset_index()
     
-    # Count in specific band (84-86 as default, passed via params)
-    df_band = filter_size_band(df_recent, min_m2, max_m2)
-    band_counts = df_band.groupby('apt_seq').size().reset_index(name='cnt_band')
+    # 4. 두 집합 결합 (밴드 내 거래가 있는 단지 기준)
+    grouped = pd.merge(total_stats, band_stats, on='apt_seq', how='inner')
     
-    grouped = pd.merge(grouped, band_counts, on='apt_seq', how='left').fillna(0)
-    
-    # Filtering criteria: cnt_total >= n_total AND cnt_band >= n_85
+    # 5. 최종 필터링: 전체 거래수 >= n_total AND 밴드 거래수 >= n_85
     filtered = grouped[(grouped['cnt_total'] >= n_total) & (grouped['cnt_band'] >= n_85)]
     
     if filtered.empty:
@@ -75,7 +78,11 @@ def compute_age_group_levels(df_band: pd.DataFrame, min_samples: int = 10) -> pd
     df_band = df_band.copy()
     df_band['age_group'] = df_band['age'].apply(get_age_group)
     
-    summary = df_band.groupby('age_group').agg(
+    # 정해진 순서대로 정렬하기 위해 Categorical 데이터 처리
+    order = ["≤5 (신축)", "5~10 (준신축)", ">10 (구축)"]
+    df_band['age_group'] = pd.Categorical(df_band['age_group'], categories=order, ordered=True)
+    
+    summary = df_band.groupby('age_group', observed=True).agg(
         median_pyeong_price_man=('pyeong_price_man', 'median'),
         mean_pyeong_price_man=('pyeong_price_man', 'mean'),
         median_deal_amount=('deal_amount', 'median'),

@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+requests
+xmltodict
+matplotlib
+seaborn
+python-dateutil

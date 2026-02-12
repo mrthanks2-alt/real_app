@@ -1,3 +1,4 @@
+import streamlit as st
 import os
 import requests
 import xmltodict
@@ -13,11 +14,26 @@ class RateLimitError(Exception):
 
 class ApiError(Exception):
     pass
+
 class RTMSClient:
     def __init__(self):
-        self.service_key = os.environ.get("RTMS_SERVICE_KEY")
-        # 사용자가 제공한 정확한 End Point로 수정합니다.
-        # 기존: .../getRTMSDataSvcAptTradeDev 가 붙어있었으나, 사용자가 보내준 주소를 기본으로 합니다.
+        # 인증키 로드 로직 (보안 강화)
+        # 1순위: streamlit.secrets
+        # 2순위: os.environ
+        self.service_key = None
+        
+        try:
+            if "RTMS_SERVICE_KEY" in st.secrets:
+                self.service_key = st.secrets["RTMS_SERVICE_KEY"]
+        except:
+            pass
+            
+        if not self.service_key:
+            self.service_key = os.environ.get("RTMS_SERVICE_KEY")
+            
+        if not self.service_key:
+            raise ValueError("인증키를 찾을 수 없습니다. Streamlit Secrets 또는 환경변수에 'RTMS_SERVICE_KEY'를 설정해주세요.")
+
         self.base_url = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev"
 
     def fetch_monthly_data(self, lawd_cd: str, deal_ymd: str):
