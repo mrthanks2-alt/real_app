@@ -6,3 +6,4 @@ xmltodict
 matplotlib
 seaborn
 python-dateutil
+koreanize-matplotlib

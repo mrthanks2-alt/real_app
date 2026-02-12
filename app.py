@@ -7,27 +7,14 @@ from dateutil.relativedelta import relativedelta
 import os
 import time
 import platform
+import koreanize_matplotlib
+
+import matplotlib.pyplot as plt
+plt.rcParams['axes.unicode_minus'] = False
 
 from storage import init_db, save_trades, load_trades, get_last_deal_ymd
 from rtms_client import RTMSClient, RateLimitError, ApiError
 import analytics
-
-# OS별 한글 폰트 설정
-def set_korean_font():
-    os_name = platform.system()
-    if os_name == "Windows":
-        font_name = "Malgun Gothic"
-    elif os_name == "Darwin":  # macOS
-        font_name = "AppleGothic"
-    else:  # Linux (Streamlit Cloud 등)
-        # 나눔고딕이 설치되어 있을 경우 사용, 아닐 경우 기본 폰트 사용
-        font_name = "NanumGothic"
-        # 폰트 파일이 있는지 확인하거나 폰트 리스트에서 검색하는 로직을 추가할 수 있음
-    
-    plt.rcParams['font.family'] = font_name
-    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
-
-set_korean_font()
 
 # [설정] 컬럼명 한글 매핑 및 단위 명시
 COLUMN_MAPPING = {
