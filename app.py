@@ -34,7 +34,7 @@ def set_korean_font():
 
 set_korean_font()
 
-from storage import init_db, save_trades, load_trades, get_last_deal_ymd, delete_trades
+from database_handler import init_db, save_trades, load_trades, get_last_deal_ymd, delete_trades
 from rtms_client import RTMSClient, RateLimitError, ApiError
 import analytics
 

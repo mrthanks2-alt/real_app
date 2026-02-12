@@ -3,7 +3,9 @@ import pandas as pd
 from datetime import datetime
 import os
 
-DB_NAME = "rtms_trades.sqlite"
+# DB 파일 경로를 절대 경로로 설정하여 배포 환경 안정성 확보
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, "rtms_trades.sqlite")
 
 def get_connection():
     return sqlite3.connect(DB_NAME)
