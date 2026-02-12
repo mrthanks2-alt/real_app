@@ -80,15 +80,43 @@ def format_for_display(df: pd.DataFrame) -> pd.DataFrame:
     cols_to_drop = [c for c in DROP_COLUMNS if c in display_df.columns]
     display_df = display_df.drop(columns=cols_to_drop)
     
-    # 2. 정수형 변환 (소수점 제거)
-    for col in INT_COLUMNS:
+    # 2. 형 변환
+    # 정수형 컬럼 처리 (소수점 제거 및 정수 캐스팅)
+    for col in INT_COLUMNS + ['deal_amount']:
         if col in display_df.columns:
-            display_df[col] = display_df[col].fillna(0).astype(int)
+            display_df[col] = pd.to_numeric(display_df[col], errors='coerce').fillna(0).astype(int)
+
+    # 실수형 컬럼 처리 (면적, 평형 등 소수점 2자리)
+    float_cols = ['exclu_use_ar', 'pyeong', 'median_pyeong']
+    for col in float_cols:
+        if col in display_df.columns:
+            display_df[col] = pd.to_numeric(display_df[col], errors='coerce').round(2)
             
     # 3. 컬럼명 한글화
     display_df = display_df.rename(columns=COLUMN_MAPPING)
     
     return display_df
+
+def style_dataframe(df: pd.DataFrame):
+    """데이터프레임에 천 단위 콤마 및 소수점 포맷팅을 적용합니다."""
+    # 한글 컬럼명 기준으로 포맷 지정
+    format_dict = {
+        '거래금액(만원)': '{:,.0f}',
+        '평당가 (만원)': '{:,.0f}',
+        '중위 평당가 (만원)': '{:,.0f}',
+        '평균 평당가 (만원)': '{:,.0f}',
+        '매매가의 중앙값 (만원)': '{:,.0f}',
+        '중위 매매가 (만원)': '{:,.0f}',
+        '거래건수': '{:,.0f}',
+        '전체 거래수': '{:,.0f}',
+        '밴드 거래수': '{:,.0f}',
+        '전용면적(㎡)': '{:,.2f}',
+        '평형': '{:,.2f}',
+        '전용평형': '{:,.2f}'
+    }
+    # 실제 존재하는 컬럼에 대해서만 포맷팅 적용
+    applied_formats = {k: v for k, v in format_dict.items() if k in df.columns}
+    return df.style.format(applied_formats, na_rep="-")
 
 # Page Config
 st.set_page_config(page_title="아파트 매매 실거래가 분석 앱", layout="wide")
@@ -293,8 +321,8 @@ if btn_analyze or 'df_trades' in st.session_state:
                     # 컬럼 순서 조정: ["아파트명", "전용평형", "중위 평당가 (만원)", "중위 매매가 (만원)", "전체 거래수"]
                     # 단지명(apt_nm)을 아파트명으로 표시하기 위해 매핑 확인
                     display_top5 = display_top5.rename(columns={'단지명': '아파트명'})
-                    cols_to_show = ['아파트명', '전용평형', '중위 평당가 (만원)', '중위 매매가 (만원)', '전체 거래수']
-                    st.table(display_top5[[c for c in cols_to_show if c in display_top5.columns]])
+                    cols_to_show = ['아파트명', '전용평형', '중위 평당가 (만원)', '중위 매매가 (만원)', '전체 거래수', '밴드 거래수']
+                    st.table(style_dataframe(display_top5[[c for c in cols_to_show if c in display_top5.columns]]))
                 st.caption(f"💡 {leading['notes']}")
             else:
                 st.info(f"ℹ️ {leading['notes']}")
@@ -305,7 +333,7 @@ if btn_analyze or 'df_trades' in st.session_state:
             age_summary = analytics.compute_age_group_levels(df_band)
             if not age_summary.empty:
                 display_age = format_for_display(age_summary)
-                st.dataframe(display_age, use_container_width=True, hide_index=True)
+                st.dataframe(style_dataframe(display_age), use_container_width=True, hide_index=True)
             else:
                 st.info("연식 구분을 위한 데이터가 충분하지 않습니다.")
 
@@ -314,7 +342,7 @@ if btn_analyze or 'df_trades' in st.session_state:
             st.markdown("<h5>📋 선택 평형 실거래 내역</h5>", unsafe_allow_html=True)
             # 내림차순 정렬 후 표시 전처리 적용
             display_raw = format_for_display(df_band.sort_values(['deal_year', 'deal_month', 'deal_day'], ascending=False))
-            st.dataframe(display_raw, use_container_width=True, hide_index=True)
+            st.dataframe(style_dataframe(display_raw), use_container_width=True, hide_index=True)
 
             # Footer
             st.markdown("---")
