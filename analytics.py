@@ -75,15 +75,15 @@ def compute_age_group_levels(df_band: pd.DataFrame, min_samples: int = 10) -> pd
     
     # Define age groups
     def get_age_group(age):
-        if age <= 5: return "≤5 (신축)"
-        elif age <= 10: return "5~10 (준신축)"
-        else: return ">10 (구축)"
+        if age <= 5: return "신축(5년이내)"
+        elif age <= 10: return "준신축(5~10년)"
+        else: return "구축(10년이상)"
     
     df_band = df_band.copy()
     df_band['age_group'] = df_band['age'].apply(get_age_group)
     
     # 정해진 순서대로 정렬하기 위해 Categorical 데이터 처리
-    order = ["≤5 (신축)", "5~10 (준신축)", ">10 (구축)"]
+    order = ["신축(5년이내)", "준신축(5~10년)", "구축(10년이상)"]
     df_band['age_group'] = pd.Categorical(df_band['age_group'], categories=order, ordered=True)
     
     summary = df_band.groupby('age_group', observed=True).agg(

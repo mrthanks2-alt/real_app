@@ -7,12 +7,34 @@ from dateutil.relativedelta import relativedelta
 import os
 import time
 import platform
-import koreanize_matplotlib
+try:
+    import koreanize_matplotlib
+    HAS_KOREANIZE = True
+except ImportError:
+    HAS_KOREANIZE = False
 
 import matplotlib.pyplot as plt
-plt.rcParams['axes.unicode_minus'] = False
 
-from storage import init_db, save_trades, load_trades, get_last_deal_ymd
+# 폰트 설정 로직
+def set_korean_font():
+    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
+    
+    if HAS_KOREANIZE:
+        # 라이브러리가 있으면 자동 설정 사용
+        return
+        
+    # 라이브러리가 없을 경우 OS별 수동 설정 (Fallback)
+    os_name = platform.system()
+    if os_name == "Windows":
+        plt.rcParams['font.family'] = 'Malgun Gothic'
+    elif os_name == "Darwin":
+        plt.rcParams['font.family'] = 'AppleGothic'
+    else:
+        plt.rcParams['font.family'] = 'NanumGothic'
+
+set_korean_font()
+
+from storage import init_db, save_trades, load_trades, get_last_deal_ymd, delete_trades
 from rtms_client import RTMSClient, RateLimitError, ApiError
 import analytics
 
@@ -47,7 +69,7 @@ DROP_COLUMNS = ['lawd_cd', 'deal_ymd', 'apt_seq', 'created_at', 'age_is_estimate
 
 # 정수형 변환이 필요한 컬럼 목록
 INT_COLUMNS = [
-    'cnt', 'cnt_band', 'cnt_total', 
+    'cnt', 'cnt_band', 'cnt_total', 'build_year',
     'median_pyeong_price_man', 'mean_pyeong_price_man',
     'median_deal_amount', 'median_deal_amount_band', 'pyeong_price_won'
 ]
@@ -122,13 +144,18 @@ def load_region_data():
     for encoding in ['utf-8-sig', 'cp949', 'utf-8']:
         try:
             df = pd.read_csv(csv_path, dtype=str, encoding=encoding)
+            # 컬럼명 유연하게 대응 (region/name, code/cd)
             code_col = next((c for c in df.columns if 'code' in c.lower() or 'cd' in c.lower()), None)
             name_col = next((c for c in df.columns if 'name' in c.lower() or 'region' in c.lower() or '법정동' in c.lower() or '지역' in c.lower()), None)
             
             if code_col and name_col:
-                df = df[[name_col, code_col]].rename(columns={name_col: 'name', code_col: 'code'})
+                df = df[[name_col, code_col]].rename(columns={name_col: 'region', code_col: 'code'})
                 df['code'] = df['code'].str.strip()
                 df['lawd_cd'] = df['code'].str[:5]
+                
+                # 시도/시군구 분리 로직
+                df['sido'] = df['region'].apply(lambda x: x.split(' ', 1)[0])
+                df['sigungu'] = df['region'].apply(lambda x: x.split(' ', 1)[1] if ' ' in x else "")
                 return df
         except:
             continue
@@ -139,27 +166,46 @@ st.sidebar.title("🔍 검색 설정")
 
 region_df = load_region_data()
 selected_lawd_cd = None
+selected_name = ""
 
 if region_df is not None:
-    region_options = region_df['name'].tolist()
-    selected_name = st.sidebar.selectbox("지역 선택", options=region_options, help="분석할 시/군/구를 선택하세요.")
-    selected_lawd_cd = region_df[region_df['name'] == selected_name]['lawd_cd'].values[0]
-    st.sidebar.info(f"선택된 법정동 코드: {selected_lawd_cd}")
+    # 1단계: 시/도 선택
+    sido_list = sorted(region_df['sido'].unique())
+    selected_sido = st.sidebar.selectbox("시/도 선택", options=sido_list)
+    
+    # 2단계: 시/군/구 선택
+    sigungu_df = region_df[region_df['sido'] == selected_sido]
+    sigungu_list = sorted([s for s in sigungu_df['sigungu'].unique() if s])
+    
+    if sigungu_list:
+        selected_sigungu = st.sidebar.selectbox("시/군/구 선택", options=sigungu_list)
+        final_target = sigungu_df[sigungu_df['sigungu'] == selected_sigungu]
+    else:
+        # 하위 시군구가 없는 경우 (예: 세종시)
+        st.sidebar.text("시/군/구 없음 (단일 지역)")
+        final_target = sigungu_df
+        
+    if not final_target.empty:
+        selected_lawd_cd = final_target['lawd_cd'].values[0]
+        selected_name = final_target['region'].values[0]
+        st.sidebar.info(f"선택 지역: {selected_name} ({selected_lawd_cd})")
 else:
     st.sidebar.warning("lawd_cd.csv 파일을 찾을 수 없습니다.")
     fallback_cd = st.sidebar.text_input("법정동 코드 직접 입력 (5자리)", value="11110")
     if len(fallback_cd) == 5:
         selected_lawd_cd = fallback_cd
+        selected_name = f"코드 {selected_lawd_cd}"
 
-period_years = st.sidebar.radio("조회 기간 선택", options=[3, 5, 10], index=0, help="최근 몇 년간의 데이터를 수집/분석할지 선택합니다.")
+# 데이터 적재 버튼을 선택박스 바로 아래 배치
+btn_update = st.sidebar.button("🔄 최신 데이터 가져오기", use_container_width=True, help="선택한 지역의 최신 실거래 데이터를 수집합니다.")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 분석 필터")
+st.sidebar.subheader("📊 분석 옵션")
+period_years = st.sidebar.radio("조회 기간 선택", options=[3, 5, 10], index=0, help="최근 몇 년간의 데이터를 수집/분석할지 선택합니다.")
 size_range = st.sidebar.slider("대표평형 범위 (㎡)", 20.0, 200.0, (84.0, 86.0), help="주요 분석 대상이 될 전용면적 범위를 설정합니다.")
 n_total = st.sidebar.number_input("최소 전체 거래건수 (N_total)", value=10, help="단지 선정 시 필요한 최소 전체 거래수입니다.")
 n_85 = st.sidebar.number_input("최소 밴드 거래건수 (N_85)", value=5, help="설정한 평형 범위 내에서의 최소 거래수입니다.")
 
-btn_update = st.sidebar.button("💾 데이터 적재/갱신", use_container_width=True)
 btn_analyze = st.sidebar.button("📈 분석 실행", use_container_width=True)
 
 # Common Messages
@@ -178,15 +224,14 @@ if btn_update:
         st.error("유효한 지역 코드가 없습니다.")
     else:
         with st.spinner("공공데이터포털에서 데이터를 수집 중입니다..."):
-            last_ymd = get_last_deal_ymd(selected_lawd_cd)
-            end_date = datetime.now()
+            # 1. 기존 데이터 삭제 (사용자 요청: 지역별 강제 재수집)
+            delete_trades(selected_lawd_cd)
             
-            if last_ymd:
-                start_date = datetime.strptime(str(last_ymd), "%Y%m") + relativedelta(months=1)
-                st.info(f"🔄 **증분 업데이트**: {start_date.strftime('%Y-%m')}부터 데이터를 추가 수집합니다.")
-            else:
-                start_date = end_date - relativedelta(months=period_years * 12)
-                st.info(f"🚀 **초기 적재**: 최근 {period_years}년치 데이터를 수집합니다.")
+            end_date = datetime.now()
+            # 2. 시작일 계산 (오늘 기준 N년 전의 1월 1일)
+            start_date = (end_date - relativedelta(months=period_years * 12)).replace(month=1, day=1)
+            
+            st.info(f"🔄 **전체 재수집**: {selected_name}의 최근 {period_years}년치({start_date.strftime('%Y-%m')} ~) 데이터를 새로 가져옵니다.")
             
             date_range = client.get_date_range(start_date.strftime("%Y%m"), end_date.strftime("%Y%m"))
             
@@ -308,7 +353,7 @@ if btn_analyze or 'df_trades' in st.session_state:
                     # 컬럼 순서 조정: ["아파트명", "전용평형", "중위 평당가 (만원)", "중위 매매가 (만원)", "전체 거래수"]
                     # 단지명(apt_nm)을 아파트명으로 표시하기 위해 매핑 확인
                     display_top5 = display_top5.rename(columns={'단지명': '아파트명'})
-                    cols_to_show = ['아파트명', '전용평형', '중위 평당가 (만원)', '중위 매매가 (만원)', '전체 거래수', '밴드 거래수']
+                    cols_to_show = ['아파트명', '건축년도', '전용평형', '중위 평당가 (만원)', '중위 매매가 (만원)', '전체 거래수', '밴드 거래수']
                     st.table(style_dataframe(display_top5[[c for c in cols_to_show if c in display_top5.columns]]))
                 st.caption(f"💡 {leading['notes']}")
             else:

@@ -73,3 +73,11 @@ def load_trades(lawd_cd: str) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn, params=(lawd_cd,))
     conn.close()
     return df
+
+def delete_trades(lawd_cd: str):
+    """특정 지역의 데이터를 모두 삭제합니다."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM trade_raw WHERE lawd_cd = ?", (lawd_cd,))
+    conn.commit()
+    conn.close()
