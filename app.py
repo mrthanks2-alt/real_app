@@ -197,16 +197,40 @@ else:
         selected_name = f"코드 {selected_lawd_cd}"
 
 # 데이터 적재 버튼을 선택박스 바로 아래 배치
-btn_update = st.sidebar.button("🔄 최신 데이터 가져오기", use_container_width=True, help="선택한 지역의 최신 실거래 데이터를 수집합니다.")
+btn_update = st.sidebar.button("🔄 최신 데이터 가져오기", width='stretch', help="선택한 지역의 최신 실거래 데이터를 수집합니다.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 분석 옵션")
-period_years = st.sidebar.radio("조회 기간 선택", options=[3, 5, 10], index=0, help="최근 몇 년간의 데이터를 수집/분석할지 선택합니다.")
+if 'selected_period' not in st.session_state:
+    st.session_state.selected_period = 1
+
+st.sidebar.markdown("<b>조회 기간 선택</b>", unsafe_allow_html=True)
+p_col1, p_col2 = st.sidebar.columns(2)
+with p_col1:
+    if st.button("1년", width='stretch', type="primary" if st.session_state.selected_period == 1 else "secondary"):
+        st.session_state.selected_period = 1
+        st.rerun()
+with p_col2:
+    if st.button("3년", width='stretch', type="primary" if st.session_state.selected_period == 3 else "secondary"):
+        st.session_state.selected_period = 3
+        st.rerun()
+
+p_col3, p_col4 = st.sidebar.columns(2)
+with p_col3:
+    if st.button("5년", width='stretch', type="primary" if st.session_state.selected_period == 5 else "secondary"):
+        st.session_state.selected_period = 5
+        st.rerun()
+with p_col4:
+    if st.button("10년", width='stretch', type="primary" if st.session_state.selected_period == 10 else "secondary"):
+        st.session_state.selected_period = 10
+        st.rerun()
+
+period_years = st.session_state.selected_period
 size_range = st.sidebar.slider("대표평형 범위 (㎡)", 20.0, 200.0, (84.0, 86.0), help="주요 분석 대상이 될 전용면적 범위를 설정합니다.")
-n_total = st.sidebar.number_input("최소 전체 거래건수 (N_total)", value=10, help="단지 선정 시 필요한 최소 전체 거래수입니다.")
+n_total = st.sidebar.number_input("최소 전체 거래건수 (N_total)", value=5, help="단지 선정 시 필요한 최소 전체 거래수입니다.")
 n_85 = st.sidebar.number_input("최소 밴드 거래건수 (N_85)", value=5, help="설정한 평형 범위 내에서의 최소 거래수입니다.")
 
-btn_analyze = st.sidebar.button("📈 분석 실행", use_container_width=True)
+btn_analyze = st.sidebar.button("📈 분석 실행", width='stretch')
 
 # Common Messages
 DISCLAIMER = """
@@ -359,13 +383,20 @@ if btn_analyze or 'df_trades' in st.session_state:
             else:
                 st.info(f"ℹ️ {leading['notes']}")
 
+            # TOP 10 거래금액 섹션 추가
+            st.markdown("---")
+            st.subheader("🏆 선택 평형 TOP 10 거래금액 (기간 내)")
+            top10_df = df_band.sort_values('deal_amount', ascending=False).head(10)
+            display_top10 = format_for_display(top10_df)
+            st.dataframe(style_dataframe(display_top10), width='stretch', hide_index=True)
+
             # 3. 연식 구간별 분석
             st.markdown("---")
             st.markdown("<h5>🏗️ 연식 구간별 시세 수준</h5>", unsafe_allow_html=True)
             age_summary = analytics.compute_age_group_levels(df_band)
             if not age_summary.empty:
                 display_age = format_for_display(age_summary)
-                st.dataframe(style_dataframe(display_age), use_container_width=True, hide_index=True)
+                st.dataframe(style_dataframe(display_age), width='stretch', hide_index=True)
             else:
                 st.info("연식 구분을 위한 데이터가 충분하지 않습니다.")
 
@@ -374,7 +405,7 @@ if btn_analyze or 'df_trades' in st.session_state:
             st.markdown("<h5>📋 선택 평형 실거래 내역</h5>", unsafe_allow_html=True)
             # 내림차순 정렬 후 표시 전처리 적용
             display_raw = format_for_display(df_band.sort_values(['deal_year', 'deal_month', 'deal_day'], ascending=False))
-            st.dataframe(style_dataframe(display_raw), use_container_width=True, hide_index=True)
+            st.dataframe(style_dataframe(display_raw), width='stretch', hide_index=True)
 
             # Footer
             st.markdown("---")

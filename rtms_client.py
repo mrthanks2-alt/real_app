@@ -133,7 +133,7 @@ class RTMSClient:
             month = item.get("월") or item.get("dealMonth") or item.get("DEAL_MONTH")
             day = item.get("일") or item.get("dealDay") or item.get("DEAL_DAY")
             
-            # 필수 날짜 정보가 하나라도 없으면 해당 데이터는 건너뜠니다
+            # 필수 날짜 정보가 하나라도 없으면 해당 데이터는 건너뜁니다
             if year is None or month is None or day is None:
                 continue
                 
@@ -143,15 +143,20 @@ class RTMSClient:
                 amount_str = str(raw_amount).replace(",", "").strip()
                 deal_amount = int(amount_str)
                 
+                # 식별자 추출 보강
+                apt_seq = item.get("일련번호") or item.get("aptSeq") or item.get("APT_SEQ") or "unknown"
+                apt_nm = item.get("아파트") or item.get("aptNm") or item.get("APT_NM") or "unknown"
+                umd_nm = item.get("법정동") or item.get("umdNm") or item.get("UMD_NM") or ""
+
                 processed.append({
                     "lawd_cd": lawd_cd,
                     "deal_ymd": int(f"{int(year)}{int(month):02d}"),
                     "deal_year": int(year),
                     "deal_month": int(month),
                     "deal_day": int(day),
-                    "apt_seq": item.get("해제여부") or item.get("일련번호") or item.get("aptSeq") or "unknown",
-                    "apt_nm": item.get("아파트") or item.get("aptNm") or item.get("APT_NM"),
-                    "umd_nm": item.get("법정동") or item.get("umdNm"),
+                    "apt_seq": str(apt_seq).strip(),
+                    "apt_nm": str(apt_nm).strip(),
+                    "umd_nm": str(umd_nm).strip(),
                     "jibun": item.get("지번") or item.get("jibun"),
                     "exclu_use_ar": float(item.get("전용면적") or item.get("excluUseAr") or 0),
                     "deal_amount": deal_amount,

@@ -1,1 +1,1 @@
-https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=0b3ec285cec8e3f3f5a04cb624406490416907be4374771617786f413d1fda37&LAWD_CD=44210&DEAL_YMD=202602&numOfRows=9999&pageNo=1&type=xml
+https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=0b3ec285cec8e3f3f5a04cb624406490416907be4374771617786f413d1fda37&LAWD_CD=11650&DEAL_YMD=202602&numOfRows=9999&pageNo=1&type=xml

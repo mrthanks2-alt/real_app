@@ -32,13 +32,14 @@ def compute_leading_complex(df: pd.DataFrame, lookback_years: int, n_total: int,
     df_recent = df[df['deal_year'] >= (current_year - lookback_years)]
     
     # 2. 전체 거래수 집합 (모든 평형 합산)
-    total_stats = df_recent.groupby(['apt_seq', 'apt_nm', 'build_year']).agg(
+    total_stats = df_recent.groupby(['apt_seq', 'apt_nm']).agg(
+        build_year=('build_year', 'max'),
         cnt_total=('deal_amount', 'count')
     ).reset_index()
     
     # 3. 밴드 내 통계 집합 (설정 평형 한정: 가격 및 건수)
     df_band = filter_size_band(df_recent, min_m2, max_m2)
-    band_stats = df_band.groupby('apt_seq').agg(
+    band_stats = df_band.groupby(['apt_seq', 'apt_nm']).agg(
         cnt_band=('deal_amount', 'count'),
         median_pyeong_price_man=('pyeong_price_man', 'median'),
         median_pyeong=('pyeong', 'median')
@@ -48,7 +49,7 @@ def compute_leading_complex(df: pd.DataFrame, lookback_years: int, n_total: int,
     band_stats['median_deal_amount_band'] = band_stats['median_pyeong'] * band_stats['median_pyeong_price_man']
     
     # 4. 두 집합 결합 (밴드 내 거래가 있는 단지 기준)
-    grouped = pd.merge(total_stats, band_stats, on='apt_seq', how='inner')
+    grouped = pd.merge(total_stats, band_stats, on=['apt_seq', 'apt_nm'], how='inner')
     
     # 5. 최종 필터링: 전체 거래수 >= n_total AND 밴드 거래수 >= n_85
     filtered = grouped[(grouped['cnt_total'] >= n_total) & (grouped['cnt_band'] >= n_85)]
