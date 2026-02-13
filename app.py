@@ -134,7 +134,7 @@ st.set_page_config(page_title="아파트 매매 실거래가 분석 앱", layout
 init_db()
 
 @st.cache_data
-def load_region_data():
+def load_region_data_v2():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     csv_path = os.path.join(base_dir, "lawd_cd.csv")
     
@@ -164,7 +164,7 @@ def load_region_data():
 # Sidebar
 st.sidebar.title("🔍 검색 설정")
 
-region_df = load_region_data()
+region_df = load_region_data_v2()
 selected_lawd_cd = None
 selected_name = ""
 
