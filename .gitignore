@@ -20,7 +20,7 @@ debug_url.txt
 debug_error.log
 
 # Data (Optional but recommended for privacy)
-lawd_cd.csv
+# lawd_cd.csv (Commented out to allow deployment)
 
 # OS
 .DS_Store

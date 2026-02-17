@@ -136,16 +136,32 @@ init_db()
 
 @st.cache_data
 def load_region_data_v2():
+    # 1. 시도 가능한 파일 경로 리스트 생성
+    possible_paths = []
+    
+    # (A) 스크립트 파일 기준 경로
     if getattr(sys, "frozen", False):
-        # PyInstaller bundle environment
         base_dir = sys._MEIPASS
+        possible_paths.append(os.path.join(base_dir, "lawd_cd.csv"))
     else:
-        # Normal Python environment
         base_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths.append(os.path.join(base_dir, "lawd_cd.csv"))
     
-    csv_path = os.path.join(base_dir, "lawd_cd.csv")
+    # (B) 현재 작업 디렉토리 기준 경로
+    possible_paths.append(os.path.join(os.getcwd(), "lawd_cd.csv"))
     
-    if not os.path.exists(csv_path):
+    # (C) 추가적인 상대 경로 (웹 환경 대비)
+    possible_paths.append("lawd_cd.csv")
+
+    csv_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            csv_path = path
+            break
+            
+    if not csv_path:
+        # 디버깅을 위해 시도한 경로들을 에러 메시지에 포함 (선택사항)
+        # st.sidebar.error(f"Tried: {possible_paths}")
         return None
     
     for encoding in ['utf-8-sig', 'cp949', 'utf-8']:
