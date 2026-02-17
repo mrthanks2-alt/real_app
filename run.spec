@@ -1,11 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
-a = Analysis(
-    ['run.py'],
-    pathex=[],
-    binaries=[],
-    datas=[],
+    datas=[('lawd_cd.csv', '.')],
     hiddenimports=[],
     hookspath=['.'],
     hooksconfig={},

@@ -135,7 +135,13 @@ init_db()
 
 @st.cache_data
 def load_region_data_v2():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, "frozen", False):
+        # PyInstaller bundle environment
+        base_dir = sys._MEIPASS
+    else:
+        # Normal Python environment
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
     csv_path = os.path.join(base_dir, "lawd_cd.csv")
     
     if not os.path.exists(csv_path):
